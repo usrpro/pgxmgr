@@ -4,23 +4,26 @@ All migrations are run incrementaly in seperate transaction blocks.
 Execution is terminated when ay migration fails and a rollback is performed to the beginning
 of this failing migration. Any previous migrations will already be committed.
 */
-package migrate
+package pgxmgr
 
 import (
-	"io/ioutil"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	log "gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/jackc/pgx"
+
+	"github.com/usrpro/dotpgx"
 )
 
 const create_rev_table string = `
-	CREATE TABLE IF NOT EXISTS public.schema_version (
+	CREATE TABLE IF NOT EXISTS schema_version (
 		major int NOT NULL,
 		minor int NOT NULL,
 		fix int NOT NULL,
-		CONSTRAINT schema_version_pkey PRIMARY KEY (major,minor,fix)
+		CONSTRAINT schema_version_pkey PRIMARY KEY ( major , minor, fix)
 	);
 `
 
@@ -29,89 +32,111 @@ const insert_rev string = `
 	VALUES ( $1, $2, $3);
 `
 
+const check_rev string = `
+	SELECT true::bool FROM schema_version
+	WHERE
+		major = $1
+	AND
+		minor = $2
+	AND
+		fix = $3
+	;
+`
+
 // Run loads and executes the migrations.
 // The first argument needs to be an instance of a configured pgx connection pool.
 // The second argument should be directory where the migration files are loaded from.
 // Files with the signature of ##-##-####-<name>.sql will be loaded and executed in order.
 // The three number groups stand for major, minor and fix version.
-func Run(pool *pgx.ConnPool, path string) (err error) {
-	queries, err := loadQueries(path)
+func Run(db *dotpgx.DB, path string) (err error) {
+	_, err = db.Pool.Exec(create_rev_table)
 	if err != nil {
 		return
 	}
-
-	conn, err := pool.Acquire()
-	defer pool.Release(conn)
+	files, err := listFiles(path)
 	if err != nil {
 		return
 	}
-
-	_, err = conn.Exec(create_rev_table)
-	if err != nil {
+	// TODO: error in map was not empty.
+	if err = db.ClearMap(); err != nil {
 		return
 	}
-
-	for _, q := range queries {
-		err = exec(conn, q)
+	for _, f := range files {
+		err = exec(db, f)
 		if err != nil {
-			return err
+			return
 		}
 	}
 	return
 }
 
-type query struct {
-	major  int
-	minor  int
-	fix    int
-	script string
+type file struct {
+	name  string
+	major int
+	minor int
+	fix   int
 }
 
-func loadQueries(path string) (queries []query, err error) {
+func (f *file) skip(tx *dotpgx.Tx) (b bool, err error) {
+	r := tx.Ptx.QueryRow(check_rev, f.major, f.minor, f.fix)
+	if err = r.Scan(&b); err != nil {
+		if err == pgx.ErrNoRows {
+			return b, nil
+		}
+	}
+	return
+}
+
+func listFiles(path string) (files []file, err error) {
 	// TODO: improve glob pattern
-	names, err := filepath.Glob(path + "/*.sql")
+	g := strings.Join([]string{path, "/*.sql"}, "")
+	names, err := filepath.Glob(g)
 	if err != nil {
 		return
 	}
 	for _, name := range names {
-		v := strings.SplitN(name, "-", 3)
-		major, err := strconv.Atoi(v[0])
-		minor, err := strconv.Atoi(v[1])
-		fix, err := strconv.Atoi(v[2])
-		if err != nil {
-			return nil, err
+		f := file{name: name}
+		n := strings.Split(name, "/")
+		v := strings.Split(n[len(n)-1], "-")
+		if f.major, err = strconv.Atoi(v[0]); err != nil {
+			return
 		}
-		script, err := ioutil.ReadFile(name)
-		if err != nil {
-			return nil, err
+		if f.minor, err = strconv.Atoi(v[1]); err != nil {
+			return
 		}
-		q := query{
-			major:  major,
-			minor:  minor,
-			fix:    fix,
-			script: string(script),
+		if f.fix, err = strconv.Atoi(v[2]); err != nil {
+			return
 		}
-		queries = append(queries, q)
+		files = append(files, f)
 	}
 	return
 }
 
-func exec(conn *pgx.Conn, q query) (err error) {
-	tx, err := conn.Begin()
+func exec(db *dotpgx.DB, f file) (err error) {
+	log.Info("Migration exec", "parse", f)
+	if err = db.ParseFiles(f.name); err != nil {
+		return
+	}
+	defer db.ClearMap()
+	tx, err := db.Begin()
 	if err != nil {
 		return
 	}
 	defer tx.Rollback()
-
-	_, err = tx.Exec(insert_rev, q.major, q.minor, q.fix)
-	if err != nil {
+	var skip bool
+	if skip, err = f.skip(tx); skip || err != nil {
+		log.Info("Migration exec", "skip", f)
 		return
 	}
-
-	_, err = tx.Exec(q.script)
-	if err != nil {
+	log.Info("Migration exec", "start", f)
+	if _, err = tx.Ptx.Exec(insert_rev, f.major, f.minor, f.fix); err != nil {
 		return
 	}
-
-	return tx.Commit()
+	for _, q := range db.List() {
+		if _, err = tx.Exec(q); err != nil {
+			return
+		}
+	}
+	err = tx.Commit()
+	return
 }
