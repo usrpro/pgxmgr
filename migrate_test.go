@@ -44,6 +44,10 @@ var files_exp = []file{
 }
 
 func TestListFiles(t *testing.T) {
+	_, err := listFiles("nothing")
+	if err == nil {
+		t.Fatal("Expected an error form listFiles")
+	}
 	got, err := listFiles("tests/files")
 	if err != nil {
 		t.Fatal(err)

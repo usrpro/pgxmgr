@@ -7,6 +7,7 @@ of this failing migration. Any previous migrations will already be committed.
 package pgxmgr
 
 import (
+	"errors"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -93,6 +94,9 @@ func listFiles(path string) (files []file, err error) {
 	names, err := filepath.Glob(g)
 	if err != nil {
 		return
+	}
+	if len(names) == 0 {
+		return nil, errors.New("No migration files loaded")
 	}
 	for _, name := range names {
 		f := file{name: name}
