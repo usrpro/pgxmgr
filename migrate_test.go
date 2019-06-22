@@ -184,7 +184,7 @@ func TestRun(t *testing.T) {
 		}
 	}
 	// Final check: attempt to insert & select on resulting table
-	if err = db.ParseSql(
+	if err = db.ParseSQL(
 		strings.NewReader(`
 			--name: insert-peer
 			insert into peers (name, email, nick) values ($1, $2, $3);
