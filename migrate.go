@@ -1,5 +1,5 @@
 /*
-Package migrate loads and executes the migration scripts on a connection aquired from a pgx pool.
+Package pgxmgr loads and executes the migration scripts on a connection aquired from a pgx pool.
 All migrations are run incrementaly in seperate transaction blocks.
 Execution is terminated when ay migration fails and a rollback is performed to the beginning
 of this failing migration. Any previous migrations will already be committed.
@@ -19,7 +19,7 @@ import (
 	"github.com/usrpro/dotpgx"
 )
 
-const create_rev_table string = `
+const createRevTable string = `
 	CREATE TABLE IF NOT EXISTS schema_version (
 		major int NOT NULL,
 		minor int NOT NULL,
@@ -28,12 +28,12 @@ const create_rev_table string = `
 	);
 `
 
-const insert_rev string = `
+const insertRev string = `
 	INSERT INTO schema_version (major, minor, fix)
 	VALUES ( $1, $2, $3);
 `
 
-const check_rev string = `
+const checkRev string = `
 	SELECT true::bool FROM schema_version
 	WHERE
 		major = $1
@@ -50,7 +50,7 @@ const check_rev string = `
 // Files with the signature of ##-##-####-<name>.sql will be loaded and executed in order.
 // The three number groups stand for major, minor and fix version.
 func Run(db *dotpgx.DB, path string) (err error) {
-	_, err = db.Pool.Exec(create_rev_table)
+	_, err = db.Pool.Exec(createRevTable)
 	if err != nil {
 		return
 	}
@@ -79,7 +79,7 @@ type file struct {
 }
 
 func (f *file) skip(tx *dotpgx.Tx) (b bool, err error) {
-	r := tx.Ptx.QueryRow(check_rev, f.major, f.minor, f.fix)
+	r := tx.Ptx.QueryRow(checkRev, f.major, f.minor, f.fix)
 	if err = r.Scan(&b); err != nil {
 		if err == pgx.ErrNoRows {
 			return b, nil
@@ -133,7 +133,7 @@ func exec(db *dotpgx.DB, f file) (err error) {
 		return
 	}
 	log.Info("Migration exec", "start", f)
-	if _, err = tx.Ptx.Exec(insert_rev, f.major, f.minor, f.fix); err != nil {
+	if _, err = tx.Ptx.Exec(insertRev, f.major, f.minor, f.fix); err != nil {
 		return
 	}
 	for _, q := range db.List() {

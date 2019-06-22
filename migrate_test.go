@@ -10,7 +10,7 @@ import (
 	log "gopkg.in/inconshreveable/log15.v2"
 )
 
-var files_exp = []file{
+var filesExp = []file{
 	{
 		name:  "tests/files/00-00-0000-file.sql",
 		major: 0,
@@ -52,10 +52,10 @@ func TestListFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(files_exp, got) {
+	if !reflect.DeepEqual(filesExp, got) {
 		t.Fatal(
 			"Files lists not equal\nExpected:\n",
-			files_exp,
+			filesExp,
 			"\nGot:\n",
 			got,
 		)
@@ -110,7 +110,7 @@ var conf = pgx.ConnPoolConfig{
 
 var db *dotpgx.DB
 
-var exp_mgr = []file{
+var expMgr = []file{
 	{
 		major: 0,
 		minor: 0,
@@ -128,7 +128,7 @@ var exp_mgr = []file{
 	},
 }
 
-var exp_err = file{
+var expErr = file{
 	major: 1,
 	minor: 0,
 	fix:   0,
@@ -145,11 +145,11 @@ func TestRun(t *testing.T) {
 	if err = Run(db, "tests/migrations1"); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range exp_mgr[:2] {
+	for _, f := range expMgr[:2] {
 		if a, err := isApplied(f); !a || err != nil {
 			t.Fatal(
 				"Migration 1 not applied\nExpected:\n",
-				exp_mgr[:2],
+				expMgr[:2],
 				"\nGot:\n",
 				dumpVersion(),
 			)
@@ -160,12 +160,12 @@ func TestRun(t *testing.T) {
 	} else {
 		log.Debug("Migration error test", "error", err)
 	}
-	if a, err := isApplied(exp_err); err != nil {
+	if a, err := isApplied(expErr); err != nil {
 		t.Fatal("Error in isApplied", err)
 	} else if a {
 		t.Fatal(
 			"Errored migration applied\nExpected:\n",
-			exp_mgr[:2],
+			expMgr[:2],
 			"\nGot:\n",
 			dumpVersion(),
 		)
@@ -173,11 +173,11 @@ func TestRun(t *testing.T) {
 	if err = Run(db, "tests/migrations2"); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range exp_mgr {
+	for _, f := range expMgr {
 		if a, err := isApplied(f); !a || err != nil {
 			t.Fatal(
 				"Migration 2 not applied\nExpected:\n",
-				exp_mgr,
+				expMgr,
 				"\nGot:\n",
 				dumpVersion(),
 			)
