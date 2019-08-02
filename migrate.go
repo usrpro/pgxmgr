@@ -12,8 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	log "gopkg.in/inconshreveable/log15.v2"
-
+	"github.com/inconshreveable/log15"
 	"github.com/jackc/pgx"
 
 	"github.com/usrpro/dotpgx"
@@ -117,7 +116,7 @@ func listFiles(path string) (files []file, err error) {
 }
 
 func exec(db *dotpgx.DB, f file) (err error) {
-	log.Info("Migration exec", "parse", f)
+	log15.Info("Migration exec", "parse", f)
 	if err = db.ParseFiles(f.name); err != nil {
 		return
 	}
@@ -129,10 +128,10 @@ func exec(db *dotpgx.DB, f file) (err error) {
 	defer tx.Rollback()
 	var skip bool
 	if skip, err = f.skip(tx); skip || err != nil {
-		log.Info("Migration exec", "skip", f)
+		log15.Info("Migration exec", "skip", f)
 		return
 	}
-	log.Info("Migration exec", "start", f)
+	log15.Info("Migration exec", "start", f)
 	if _, err = tx.Ptx.Exec(insertRev, f.major, f.minor, f.fix); err != nil {
 		return
 	}

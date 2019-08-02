@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/inconshreveable/log15"
 	"github.com/jackc/pgx"
 	"github.com/usrpro/dotpgx"
-	log "gopkg.in/inconshreveable/log15.v2"
 )
 
 var filesExp = []file{
@@ -64,10 +64,10 @@ func TestListFiles(t *testing.T) {
 
 func clean() {
 	if _, err := db.Pool.Exec("drop table peers;"); err != nil {
-		log.Crit("Cleanup error", "Error", err)
+		log15.Crit("Cleanup error", "Error", err)
 	}
 	if _, err := db.Pool.Exec("drop table schema_version;"); err != nil {
-		log.Crit("Cleanup error", "Error", err)
+		log15.Crit("Cleanup error", "Error", err)
 	}
 }
 
@@ -85,7 +85,7 @@ func dumpVersion() (files []file) {
 	for rows.Next() {
 		var f file
 		if err := rows.Scan(&f.major, &f.minor, &f.fix); err != nil {
-			log.Crit("dumpVersion", "error", err)
+			log15.Crit("dumpVersion", "error", err)
 			return
 		}
 		files = append(files, f)
@@ -158,7 +158,7 @@ func TestRun(t *testing.T) {
 	if err = Run(db, "tests/migrations-err"); err == nil {
 		t.Fatal("Expected an error")
 	} else {
-		log.Debug("Migration error test", "error", err)
+		log15.Debug("Migration error test", "error", err)
 	}
 	if a, err := isApplied(expErr); err != nil {
 		t.Fatal("Error in isApplied", err)
